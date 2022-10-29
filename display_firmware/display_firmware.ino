@@ -1,6 +1,11 @@
 #include <Arduino.h>
 #include <BluetoothSerial.h>
 #include <TFT_eSPI.h>
+// You must go to the TTF_eSPI library folder and edit the file
+// User_Setup_Select.h:
+// Comment #include <User_Setup.h>
+// Uncomment #include <User_Setups/Setup25_TTGO_T_Display.h>
+
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
   #error Bluetooth is not enabled! Please run `make menuconfig` to enable it
@@ -10,11 +15,8 @@
   #error Serial Bluetooth not available or not enabled. It is only available for the ESP32 chip.
 #endif
 
-
 #define DWIDTH 135
 #define DHEIGHT 240
-
-bool connected;
 
 // Display driver
 TFT_eSPI tft       = TFT_eSPI();
@@ -26,6 +28,7 @@ size_t spriteCursor;
 
 // Bluetooth driver
 BluetoothSerial btSerial;
+bool connected;
 #define READBUF_SIZE 33000
 char readBuf[READBUF_SIZE];
 
@@ -33,21 +36,22 @@ char readBuf[READBUF_SIZE];
 void
 setup()
 {
-  tft.init();
-  tft.setRotation(0);
+  Serial.begin(115200);
+  Serial.println("\n============ TSAFE DISPLAY ============");
 
-  tft.fillScreen(TFT_RED);
-
-  Serial.begin(9600);
-  Serial.println();
-  Serial.println("========== TSAFE ==========");
-
-  if (!btSerial.begin("TSAFE", false)) {
+  // Bluetooth module
+  if (!btSerial.begin("TSAFE-DISPLAY", false)) {
     Serial.println("! Couldn't start BluetoothSerial");
     abort();
   }
   Serial.println("? Bluetooth ready");
   connected = false;
+
+  // Display module
+  tft.init();
+  tft.setRotation(0);
+
+  tft.fillScreen(TFT_RED);
 
   spriteImage = (uint8_t*) sprite.createSprite(DWIDTH, DHEIGHT);
   if (!spriteImage) {
@@ -64,24 +68,8 @@ setup()
 }
 
 
-void
-loop()
+void try_receive_image_data()
 {
-  if (!btSerial.connected()) {
-    tft.fillScreen(TFT_RED);
-    delay(100);
-    if (connected) {
-      Serial.println("? Bluetooth disconnected");
-      connected = false;
-    }
-    return;
-
-  } else if (!connected) {
-    Serial.println("? Bluetooth connected!");
-    tft.fillScreen(TFT_BLACK);
-    connected = true;
-  }
-
   if (!btSerial.available())
     return;
 
@@ -100,4 +88,26 @@ loop()
         spriteImage[spriteCursor++] = byte;
     }
   }
+}
+
+
+void
+loop()
+{
+  if (!btSerial.connected()) {
+    tft.fillScreen(TFT_RED);
+    if (connected)
+      Serial.println("! Disconnected from sensor module");
+    connected = false;
+    Serial.println("? Waiting for sensor module...");
+    delay(1000);
+    return;
+
+  } else if (!connected) {
+    Serial.println("? Connected to sensor module");
+    tft.fillScreen(TFT_BLUE);
+    connected = true;
+  }
+
+  try_receive_image_data();
 }
